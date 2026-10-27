@@ -11,9 +11,9 @@ def test_init_defaults():
 	assert len(event) == 0
 	assert event._func is None # type: ignore # _func is private
 
-def test_init_invalid_callable():
+def test_event_invalid_callable():
 	with pytest.raises(TypeError, match="Expected a callable"):
-		Event(42) # type: ignore
+		event(42) # type: ignore
 
 def test_repr():
 	event = Event[[], None]()
@@ -92,7 +92,7 @@ def test_iadd_isub_invalid_callable():
 
 def test_class_event_decorator():
 	class MyClass:
-		@event
+		@event(method=True)
 		def my_event(self) -> None: ...
 	
 	MyClass.my_event() # No self argument required even though the event signature includes it
@@ -441,6 +441,7 @@ async def test_close_handles_coroutine_close_exception():
 	ag._awaitables.append(coro) # type: ignore # _awaitables is private
 	ag.close() # Should not raise
 
+
 ### Ordering Tests ###
 
 def test_invoke_subscription_order():
@@ -473,6 +474,46 @@ def test_descriptor_instance_cached():
 	o = Owner()
 	assert o.evt is o.evt
 
+### Options Tests ###
+
+def test_event_class_rejects_function():
+	def prototype(value: int, /) -> None: ...
+
+	with pytest.raises(TypeError, match=r"Use @event or event\(func\)"):
+		Event(prototype) # type: ignore # Event no longer takes a function
+
+	with pytest.raises(TypeError, match=r"Use @event or event\(func\)"):
+		@Event # type: ignore # Event no longer takes a function
+		def e(value: int, /) -> None: ...
+
+def test_event_decorator_function():
+	@event
+	def e(a: int, /) -> None: ...
+
+	assert isinstance(e, Event)
+	assert e._method is False # type: ignore # _method is private
+	e(1)
+
+def test_event_decorator_staticmethod_in_class():
+	class MyClass:
+		@event
+		@staticmethod
+		def e(a: int, /) -> None: ...
+
+	MyClass.e(1)
+
+def test_event_decorator_method_keeps_self():
+	class MyClass:
+		# Without method=True, "self" is part of the event signature
+		@event
+		def e(self, a: int, /) -> None: ...
+
+	received: list[tuple[MyClass, int]] = []
+	instance = MyClass()
+	MyClass.e += lambda obj, a: received.append((obj, a))
+	MyClass.e(instance, 1)
+	assert received == [(instance, 1)]
+
 def test_keyword_parameter_named_self():
 	# Event's own methods take "self" positionally, so an event parameter can also be named "self"
 	@event
@@ -494,3 +535,9 @@ async def test_keyword_parameter_named_self_fire():
 	e += handler
 	await e.fire(self=1)
 	assert received == [1]
+
+def test_event_manual_class_attribute():
+	class MyClass:
+		e = Event[[int], None]()
+
+	MyClass.e(1)

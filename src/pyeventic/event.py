@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import threading
-from typing import Any, AsyncContextManager, Awaitable, Callable, Concatenate, ContextManager, Coroutine, Generic, ParamSpec, TypeVar
+from typing import Any, AsyncContextManager, Awaitable, Callable, Concatenate, ContextManager, Generic, ParamSpec, TypeVar
 from weakref import WeakKeyDictionary
 from .awaitable_group import AwaitableGroup
 
@@ -28,9 +28,19 @@ class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContext
 		self.__exit__(exc_type, exc_value, traceback)
 
 class Event(Generic[P, R]):
-	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks")
+	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_method")
 
-	def __init__(self, func: Callable[P, R] | None = None, *, owner: type | None = None, name: str | None = None) -> None:
+	def __init__(
+		self,
+		*args: Any,
+		owner: type | None = None,
+		name: str | None = None,
+		_func: Callable[P, R] | None = None,
+		_method: bool = False,
+	) -> None:
+		# Only `event` creates an Event from a function, so @Event (Event(func)) fails with a pointer to it
+		if args: raise TypeError("Event() does not take a function. Use @event or event(func) to create an Event from a function.")
+		func = _func
 		if func and not callable(func): raise TypeError(f"Expected a callable, got {type(func).__name__!r}.")
 
 		self._lock = threading.RLock()
@@ -59,6 +69,9 @@ class Event(Generic[P, R]):
 
 		self._tasks: set[asyncio.Task[None]] = set()
 		"""A set of currently running tasks for this event."""
+
+		self._method = _method
+		"""Whether the prototype's first parameter is the instance or class parameter (created with `event(method=True)`)."""
 
 	def __repr__(self) -> str:
 		func = self._func.__name__ if self._func else "None"
@@ -106,7 +119,12 @@ class Event(Generic[P, R]):
 		with self._lock:
 			event = self._events.get(instance)
 			if event is None:
-				event = self._events[instance] = Event[P, R](self._func, owner=self._owner, name=self._name)
+				event = self._events[instance] = Event[P, R](
+					_func=self._func,
+					owner=self._owner,
+					name=self._name,
+					_method=self._method,
+				)
 		return event
 
 	def __set__(self, instance: object, value: "Event[P, R]") -> None:
@@ -233,5 +251,12 @@ class Event(Generic[P, R]):
 		with self._lock:
 			self._tasks.discard(task)
 
-def event(func: Callable[Concatenate[Any, P], R]) -> "Event[P, R]":
-	return Event[P, R](func) # type: ignore # This is for typing only, callable is never used
+def event(
+	func: Callable[P, R] | None = None,
+	/,
+	*,
+	method: bool = False,
+) -> "Event[P, R] | Callable[[Callable[P, R]], Event[P, R]]":
+	def decorator(func: Callable[P, R]) -> "Event[P, R]":
+		return Event[P, R](_func=func, _method=method)
+	return decorator(func) if func else decorator
