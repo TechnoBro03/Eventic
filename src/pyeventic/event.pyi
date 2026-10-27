@@ -338,8 +338,9 @@ def event(func: Callable[P, R], /, *, method: Literal[False] = False) -> "Event[
 	"""
 	Create an Event from a function.
 
-	The function is never called; it only defines the signature (and docstring) of the event. To create an Event from an
-	instance or class method, use ``@event(method=True)``.
+	The function is never called; it only defines the signature (and docstring) of the event. Every parameter must
+	be positional-only or keyword-only, with no default value, and ``*args`` / ``**kwargs`` are not allowed. To create
+	an Event from an instance or class method, use ``@event(method=True)``.
 
 	:param func: A callable to define the signature of the event.
 	:type func: Callable[P, R]
@@ -347,7 +348,7 @@ def event(func: Callable[P, R], /, *, method: Literal[False] = False) -> "Event[
 	:type method: Literal[False]
 	:return: An Event with the same signature as the function.
 	:rtype: Event[P, R]
-	:raises TypeError: If func is not Callable.
+	:raises TypeError: If func is not Callable, or the signature breaks a rule.
 	"""
 
 @overload
@@ -355,7 +356,7 @@ def event(func: Callable[Concatenate[Any, P], R], /, *, method: Literal[True]) -
 	"""
 	Create an Event from an instance or class method.
 
-	The instance or class parameter (``self`` / ``cls``) is removed from the event signature.
+	The instance or class parameter (``self`` / ``cls``) is removed from the event signature and is not validated.
 
 	:param func: A method to define the signature of the event.
 	:type func: Callable[Concatenate[Any, P], R]
@@ -363,7 +364,7 @@ def event(func: Callable[Concatenate[Any, P], R], /, *, method: Literal[True]) -
 	:type method: Literal[True]
 	:return: An Event with the same signature as the method without the instance or class parameter.
 	:rtype: Event[P, R]
-	:raises TypeError: If func is not Callable.
+	:raises TypeError: If func is not Callable, or the signature breaks a rule.
 	"""
 
 @overload
@@ -382,7 +383,7 @@ def event(*, method: Literal[True]) -> Callable[[Callable[Concatenate[Any, _P], 
 	"""
 	Get a decorator that creates an Event from an instance or class method with the given options.
 
-	The instance or class parameter (``self`` / ``cls``) is removed from the event signature.
+	The instance or class parameter (``self`` / ``cls``) is removed from the event signature and is not validated.
 
 	:param method: Whether the function is an instance or class method.
 	:type method: Literal[True]

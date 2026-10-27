@@ -9,6 +9,30 @@ from .awaitable_group import AwaitableGroup
 P = ParamSpec("P")
 R = TypeVar("R", None, Awaitable[None])
 
+def _validate_signature(func: Callable[..., Any], method: bool) -> None:
+	"""
+	Check that an event prototype has an unambiguous signature.
+
+	:param func: The prototype function.
+	:param method: Whether the first parameter is the instance or class parameter, which is not validated.
+	:raises TypeError: If the signature breaks a rule.
+	"""
+	try: parameters = list(inspect.signature(func).parameters.values())
+	except (TypeError, ValueError): return # No signature available (e.g. some builtins), nothing to validate
+
+	if method: parameters = parameters[1:]
+
+	for p in parameters:
+		if p.default is not p.empty:
+			raise TypeError(f"Event parameter {p.name!r} cannot have a default value.")
+		if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+			raise TypeError(f"Event parameter {p.name!r} cannot be *args or **kwargs.")
+		if p.kind is p.POSITIONAL_OR_KEYWORD:
+			raise TypeError(
+				f"Event parameter {p.name!r} must be positional-only or keyword-only. "
+				"Add '/' or '*' to the signature."
+			)
+
 class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContextManager["Event[P, R]"]):
 	"""A context manager to subscribe and unsubscribe a handler to an Event."""
 	def __init__(self, event: "Event[P, R]", handler: Callable[P, None | Awaitable[None]]) -> None:
@@ -75,6 +99,7 @@ class Event(Generic[P, R]):
 		"""Whether the prototype's first parameter is the instance or class parameter (created with `event(method=True)`)."""
 
 		if func:
+			_validate_signature(func, _method)
 			# Copy name, docstring, signature, etc. for introspection (help(), inspect.signature, Sphinx)
 			update_wrapper(self, func)
 
