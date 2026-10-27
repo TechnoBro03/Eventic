@@ -145,7 +145,9 @@ class Event(Generic[P, R]):
 	# Docstring left blank to allow inheritance from function
 
 	def wait(self: "Event[P, Awaitable[None]]") -> Coroutine[Any, Any, None]:
-		"""Wait for all currently running event invocations to complete."""
+		"""
+		Wait for all currently running event invocations to complete.
+		"""
 	
 	@overload
 	def once(self: "Event[P, None]", handler: Callable[P, None]) -> Callable[P, None]:

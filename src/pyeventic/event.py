@@ -62,7 +62,7 @@ class Event(Generic[P, R]):
 
 	def __repr__(self) -> str:
 		func = self._func.__name__ if self._func else "None"
-		
+
 		if self._owner and self._name:
 			return f"<Event '{self._owner.__name__}.{self._name}' func={func!r} handlers={len(self)} tasks={len(self._tasks)}>"
 		else:
@@ -72,7 +72,7 @@ class Event(Generic[P, R]):
 		if self._owner and self._name:
 			return f"Event('{self._owner.__name__}.{self._name}')"
 		return f"Event({self._func.__name__ if self._func else None!r})"
-	
+
 	def __len__(self) -> int:
 		with self._lock: return len(self._handlers)
 
@@ -126,7 +126,7 @@ class Event(Generic[P, R]):
 				self._handlers.add(handler)
 				self.on_subscribe(self, handler)
 		return handler
-	
+
 	def unsubscribe(self, handler: Callable[P, None | Awaitable[None]]) -> None:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
 
@@ -135,7 +135,7 @@ class Event(Generic[P, R]):
 				self._handlers.remove(handler)
 				self.on_unsubscribe(self, handler)
 		return None
-	
+
 	def invoke(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		with self._lock:
 			handlers = list(self._handlers)
@@ -151,7 +151,7 @@ class Event(Generic[P, R]):
 		# Always return an awaitable, even if there are no awaitables to run.
 		# Acts as None for synchronous handlers and a coroutine for asynchronous ones
 		return AwaitableGroup(*awaitables)
-	
+
 	def fire(self: "Event[P, Awaitable[None]]", *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
 		awaitable = self.invoke(*args, **kwargs)
 
@@ -176,8 +176,9 @@ class Event(Generic[P, R]):
 		with self._lock:
 			tasks = list(self._tasks)
 
-		if tasks:
-			await asyncio.gather(*tasks, return_exceptions=True)
+		if not tasks: return
+
+		await asyncio.gather(*tasks, return_exceptions=True)
 
 	def once(self, handler: Callable[P, None | Awaitable[None]]) -> Callable[P, None | Awaitable[None]]:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
@@ -188,7 +189,7 @@ class Event(Generic[P, R]):
 
 		self.subscribe(wrapper)
 		return wrapper
-	
+
 	def subscribed(self, handler: Callable[P, None | Awaitable[None]]) -> _ContextManager[P, R]:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
 		return _ContextManager(self, handler)
@@ -200,16 +201,16 @@ class Event(Generic[P, R]):
 	def __isub__(self, handler: Callable[P, None | Awaitable[None]]) -> "Event[P, R]":
 		self.unsubscribe(handler)
 		return self
-	
+
 	def __call__(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		return self.invoke(*args, **kwargs)
-	
+
 	@property
 	def on_subscribe(self) -> "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]":
 		with self._lock:
 			if self._on_subscribe is None: self._on_subscribe = Event()
 		return self._on_subscribe
-	
+
 	@on_subscribe.setter
 	def on_subscribe(self, value: "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]") -> None: ...
 	# Do nothing to prevent overwriting the event
@@ -219,7 +220,7 @@ class Event(Generic[P, R]):
 		with self._lock:
 			if self._on_unsubscribe is None: self._on_unsubscribe = Event()
 		return self._on_unsubscribe
-	
+
 	@on_unsubscribe.setter
 	def on_unsubscribe(self, value: "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]") -> None: ...
 	# Do nothing to prevent overwriting the event
