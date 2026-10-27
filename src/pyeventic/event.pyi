@@ -1,10 +1,11 @@
 import asyncio
-from typing import Any, AsyncContextManager, Awaitable, Callable, Coroutine, Concatenate, ContextManager, Generic, Literal, ParamSpec, TypeVar, overload
+from typing import Any, AsyncContextManager, Awaitable, Callable, Coroutine, Concatenate, ContextManager, Generic, Literal, overload
+from typing_extensions import ParamSpec, TypeVar # For PEP 696 defaults on Python < 3.13 (stub only, no runtime dependency)
 
-P = ParamSpec("P")
-"""The signature of an Event."""
+P = ParamSpec("P", default=[])
+"""The signature of an Event. Defaults to no parameters."""
 
-R = TypeVar("R", None, Awaitable[None])
+R = TypeVar("R", None, Awaitable[None], default=None)
 """Return type for an Event. `None` for synchronous Events or `Awaitable[None]` for asynchronous Events."""
 
 _P = ParamSpec("_P")
