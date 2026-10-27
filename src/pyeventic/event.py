@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import threading
+from functools import update_wrapper
 from typing import Any, AsyncContextManager, Awaitable, Callable, Concatenate, ContextManager, Generic, ParamSpec, TypeVar
 from weakref import WeakKeyDictionary
 from .awaitable_group import AwaitableGroup
@@ -28,7 +29,7 @@ class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContext
 		self.__exit__(exc_type, exc_value, traceback)
 
 class Event(Generic[P, R]):
-	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_method")
+	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_method", "__dict__")
 
 	def __init__(
 		self,
@@ -72,6 +73,10 @@ class Event(Generic[P, R]):
 
 		self._method = _method
 		"""Whether the prototype's first parameter is the instance or class parameter (created with `event(method=True)`)."""
+
+		if func:
+			# Copy name, docstring, signature, etc. for introspection (help(), inspect.signature, Sphinx)
+			update_wrapper(self, func)
 
 	def __repr__(self) -> str:
 		func = self._func.__name__ if self._func else "None"
