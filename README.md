@@ -338,7 +338,7 @@ with button.on_click.subscribed(lambda x, y: print(f"handler: Clicked at ({x}, {
 button.click(30, 40)
 
 # Output:
-# handler: Clicked at 10, 20
+# handler: Clicked at (10, 20)
 ```
 
 ### Events within Classes
