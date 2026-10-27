@@ -20,12 +20,15 @@ class Event(Generic[P, R]):
 	See `Eventic Documentation <https://github.com/TechnoBro03/Eventic/>`_ for more information.
 	"""
 
-	def __init__(self) -> None:
+	def __init__(self, *, on_error: Callable[[Exception], None] | None = None) -> None:
 		"""
 		Initialize a new Event.
 
 		The signature is given with type arguments (``Event[[int], None]()``). To create an Event from a function,
 		use `event`.
+
+		:param on_error: Called with each exception raised by a handler. If None (default), exceptions are ignored.
+		:type on_error: Callable[[Exception], None] | None
 		"""
 
 	def __repr__(self) -> str:
@@ -334,7 +337,7 @@ class Event(Generic[P, R]):
 	"""
 
 @overload
-def event(func: Callable[P, R], /, *, method: Literal[False] = False) -> "Event[P, R]":
+def event(func: Callable[P, R], /, *, method: Literal[False] = False, on_error: Callable[[Exception], None] | None = None) -> "Event[P, R]":
 	"""
 	Create an Event from a function.
 
@@ -346,13 +349,15 @@ def event(func: Callable[P, R], /, *, method: Literal[False] = False) -> "Event[
 	:type func: Callable[P, R]
 	:param method: Whether the function is an instance or class method. See the ``method=True`` overload.
 	:type method: Literal[False]
+	:param on_error: Called with each exception raised by a handler. If None (default), exceptions are ignored.
+	:type on_error: Callable[[Exception], None] | None
 	:return: An Event with the same signature as the function.
 	:rtype: Event[P, R]
-	:raises TypeError: If func is not Callable, or the signature breaks a rule.
+	:raises TypeError: If func or on_error is not Callable, or the signature breaks a rule.
 	"""
 
 @overload
-def event(func: Callable[Concatenate[Any, P], R], /, *, method: Literal[True]) -> "Event[P, R]":
+def event(func: Callable[Concatenate[Any, P], R], /, *, method: Literal[True], on_error: Callable[[Exception], None] | None = None) -> "Event[P, R]":
 	"""
 	Create an Event from an instance or class method.
 
@@ -362,24 +367,29 @@ def event(func: Callable[Concatenate[Any, P], R], /, *, method: Literal[True]) -
 	:type func: Callable[Concatenate[Any, P], R]
 	:param method: Whether the function is an instance or class method.
 	:type method: Literal[True]
+	:param on_error: Called with each exception raised by a handler. If None (default), exceptions are ignored.
+	:type on_error: Callable[[Exception], None] | None
 	:return: An Event with the same signature as the method without the instance or class parameter.
 	:rtype: Event[P, R]
-	:raises TypeError: If func is not Callable, or the signature breaks a rule.
+	:raises TypeError: If func or on_error is not Callable, or the signature breaks a rule.
 	"""
 
 @overload
-def event(*, method: Literal[False] = False) -> Callable[[Callable[_P, _R]], "Event[_P, _R]"]:
+def event(*, method: Literal[False] = False, on_error: Callable[[Exception], None] | None = None) -> Callable[[Callable[_P, _R]], "Event[_P, _R]"]:
 	"""
 	Get a decorator that creates an Event from a function with the given options.
 
 	:param method: Whether the function is an instance or class method. See the ``method=True`` overload.
 	:type method: Literal[False]
+	:param on_error: Called with each exception raised by a handler. If None (default), exceptions are ignored.
+	:type on_error: Callable[[Exception], None] | None
 	:return: A decorator that turns a function into an Event.
 	:rtype: Callable[[Callable[P, R]], Event[P, R]]
+	:raises TypeError: If on_error is not Callable.
 	"""
 
 @overload
-def event(*, method: Literal[True]) -> Callable[[Callable[Concatenate[Any, _P], _R]], "Event[_P, _R]"]:
+def event(*, method: Literal[True], on_error: Callable[[Exception], None] | None = None) -> Callable[[Callable[Concatenate[Any, _P], _R]], "Event[_P, _R]"]:
 	"""
 	Get a decorator that creates an Event from an instance or class method with the given options.
 
@@ -387,6 +397,9 @@ def event(*, method: Literal[True]) -> Callable[[Callable[Concatenate[Any, _P], 
 
 	:param method: Whether the function is an instance or class method.
 	:type method: Literal[True]
+	:param on_error: Called with each exception raised by a handler. If None (default), exceptions are ignored.
+	:type on_error: Callable[[Exception], None] | None
 	:return: A decorator that turns a method into an Event without the instance or class parameter.
 	:rtype: Callable[[Callable[Concatenate[Any, P], R]], Event[P, R]]
+	:raises TypeError: If on_error is not Callable.
 	"""

@@ -53,11 +53,12 @@ class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContext
 		self.__exit__(exc_type, exc_value, traceback)
 
 class Event(Generic[P, R]):
-	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_method", "__dict__")
+	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_on_error", "_method", "__dict__")
 
 	def __init__(
 		self,
 		*args: Any,
+		on_error: Callable[[Exception], None] | None = None,
 		owner: type | None = None,
 		name: str | None = None,
 		_func: Callable[P, R] | None = None,
@@ -67,6 +68,7 @@ class Event(Generic[P, R]):
 		if args: raise TypeError("Event() does not take a function. Use @event or event(func) to create an Event from a function.")
 		func = _func
 		if func and not callable(func): raise TypeError(f"Expected a callable, got {type(func).__name__!r}.")
+		if on_error is not None and not callable(on_error): raise TypeError(f"Expected a callable, got {type(on_error).__name__!r}.")
 
 		self._lock = threading.RLock()
 		"""A reentrant lock to synchronize access to the handlers dict."""
@@ -94,6 +96,9 @@ class Event(Generic[P, R]):
 
 		self._tasks: set[asyncio.Task[None]] = set()
 		"""A set of currently running tasks for this event."""
+
+		self._on_error = on_error
+		"""Called with each exception raised by a handler. If None, exceptions are ignored."""
 
 		self._method = _method
 		"""Whether the prototype's first parameter is the instance or class parameter (created with `event(method=True)`)."""
@@ -151,6 +156,7 @@ class Event(Generic[P, R]):
 			if event is None:
 				event = self._events[instance] = Event[P, R](
 					_func=self._func,
+					on_error=self._on_error,
 					owner=self._owner,
 					name=self._name,
 					_method=self._method,
@@ -196,11 +202,22 @@ class Event(Generic[P, R]):
 				result = handler(*args, **kwargs)
 				if result and inspect.isawaitable(result):
 					awaitables.append(result)
-			except Exception: pass # Ignore exceptions in handlers
+			except Exception as exc:
+				if self._on_error is None: continue # Handlers are responsible for their own exceptions
+				try: self._on_error(exc)
+				except BaseException:
+					# on_error raised, so the async handlers will never be awaited, close them to prevent warnings
+					AwaitableGroup(*awaitables).close()
+					raise
+
+		def on_done(results: list[Any]) -> None:
+			if self._on_error is None: return
+			for result in results:
+				if isinstance(result, Exception): self._on_error(result)
 
 		# Always return an awaitable, even if there are no awaitables to run.
 		# Acts as None for synchronous handlers and a coroutine for asynchronous ones
-		return AwaitableGroup(*awaitables)
+		return AwaitableGroup(*awaitables, callback=on_done)
 
 	def fire(self: "Event[P, Awaitable[None]]", /, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
 		awaitable = self.invoke(*args, **kwargs)
@@ -276,8 +293,8 @@ class Event(Generic[P, R]):
 	# Do nothing to prevent overwriting the event
 
 	def _on_task_done(self, task: asyncio.Task[None]) -> None:
-		try: task.exception()
-		except (Exception, asyncio.CancelledError): pass
+		# The task's exception (only possible if on_error raises) is deliberately left unretrieved: if no one awaits
+		# the task, asyncio reports it as "Task exception was never retrieved" instead of it being silently lost.
 		with self._lock:
 			self._tasks.discard(task)
 
@@ -286,7 +303,8 @@ def event(
 	/,
 	*,
 	method: bool = False,
+	on_error: Callable[[Exception], None] | None = None,
 ) -> "Event[P, R] | Callable[[Callable[P, R]], Event[P, R]]":
 	def decorator(func: Callable[P, R]) -> "Event[P, R]":
-		return Event[P, R](_func=func, _method=method)
+		return Event[P, R](_func=func, on_error=on_error, _method=method)
 	return decorator(func) if func else decorator

@@ -1,11 +1,17 @@
 import asyncio
 import inspect
 from types import TracebackType
-from typing import Any, Awaitable, Coroutine, Generator
+from typing import Any, Awaitable, Callable, Coroutine, Generator
 
 class AwaitableGroup(Coroutine[Any, Any, None], Awaitable[None]):
-	def __init__(self, *awaitables: Awaitable[None]) -> None:
+	def __init__(
+		self,
+		*awaitables: Awaitable[None],
+		callback: Callable[[list[Any]], None] | None = None,
+	) -> None:
 		self._awaitables: list[Awaitable[None]] = list(awaitables)
+
+		self._callback = callback
 
 		self._disposed: bool = False
 
@@ -17,8 +23,11 @@ class AwaitableGroup(Coroutine[Any, Any, None], Awaitable[None]):
 
 	async def _runner(self) -> None:
 		if not self._awaitables: return
-		try: await asyncio.gather(*self._awaitables, return_exceptions=True)
+		try:
+			results = await asyncio.gather(*self._awaitables, return_exceptions=True)
 		finally: self.close()
+		# Results are in the same order as the awaitables; exceptions are returned, not raised
+		if self._callback: self._callback(results)
 
 	@property
 	def _iterator(self) -> Generator[Any, None, None]:

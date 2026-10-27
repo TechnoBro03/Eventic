@@ -2,6 +2,7 @@ import asyncio
 import pytest
 from typing import Awaitable, Callable
 import inspect
+import warnings
 from pyeventic import Event, event
 from pyeventic.awaitable_group import AwaitableGroup
 
@@ -164,21 +165,21 @@ def test_invoke_sync():
 	event.invoke()
 	assert set(results) == {1, 2}
 
-def test_invoke_exception_swallowing():
+def test_invoke_exception_ignored():
 	event = Event[[], None]()
 	results: list[int] = []
-	
+
 	def h1(): results.append(1)
 	def h2(): raise ValueError("Handler error")
 	def h3(): results.append(3)
-	
+
 	event.subscribe(h1)
 	event.subscribe(h2)
 	event.subscribe(h3)
-	
-	# invoke() should swallow exceptions
+
+	# Without on_error, the exception is ignored and the remaining handlers are still called
 	event.invoke()
-	assert set(results) == {1, 3}
+	assert results == [1, 3]
 
 def test_call_sync():
 	event = Event[[], None]()
@@ -213,23 +214,23 @@ async def test_invoke_async():
 	assert set(results) == {1, 2, 3}
 
 @pytest.mark.asyncio
-async def test_invoke_async_exception_swallowing():
+async def test_invoke_async_exception_ignored():
 	event = Event[[], Awaitable[None]]()
 	results: list[int] = []
-	
+
 	async def h1(): results.append(1)
 	async def h2(): raise ValueError("Handler error")
 	def h3(): results.append(3)
-	
+
 	event.subscribe(h1)
 	event.subscribe(h2)
 	event.subscribe(h3)
-	
-	# invoke() should swallow exceptions
+
+	# Without on_error, the exception is ignored and the remaining handlers are still called
 	awaitable = event.invoke()
 	assert bool(awaitable) is True
 	await awaitable
-	
+
 	assert set(results) == {1, 3}
 
 @pytest.mark.asyncio
@@ -298,7 +299,8 @@ async def test_on_task_done_exception():
 	# Wait for the task to finish
 	await asyncio.gather(task, return_exceptions=True)
 	
-	# Verify the exception was swallowed and task was discarded
+	# Verify the exception was ignored (not raised) and task was discarded
+	assert task.exception() is None
 	assert task not in event._tasks # type: ignore # _tasks is private
 
 ### Once ###
@@ -556,12 +558,31 @@ def test_event_class_rejects_function():
 		@Event # type: ignore # Event no longer takes a function
 		def e(value: int, /) -> None: ...
 
+def test_event_function_with_options():
+	def prototype(value: int, /) -> None: ...
+
+	e = event(prototype, on_error=print)
+	assert e._on_error is print # type: ignore # _on_error is private
+	e(1)
+
+def test_invalid_on_error():
+	with pytest.raises(TypeError, match="Expected a callable"):
+		Event[[], None](on_error="ignore") # type: ignore
+
 def test_event_decorator_function():
 	@event
 	def e(a: int, /) -> None: ...
 
 	assert isinstance(e, Event)
 	assert e._method is False # type: ignore # _method is private
+	e(1)
+
+def test_event_decorator_function_with_options():
+	@event(on_error=print)
+	def e(a: int, /) -> None: ...
+
+	assert isinstance(e, Event)
+	assert e._on_error is print # type: ignore # _on_error is private
 	e(1)
 
 def test_event_decorator_staticmethod_in_class():
@@ -618,3 +639,150 @@ def test_event_manual_class_attribute():
 		e = Event[[int], None]()
 
 	MyClass.e(1)
+
+def test_event_decorator_with_options():
+	class MyClass:
+		@event(method=True, on_error=print)
+		def e(self, a: int, /) -> None: ...
+
+	assert MyClass.e._on_error is print # type: ignore # _on_error is private
+	MyClass.e(1)
+
+def test_descriptor_copies_options():
+	caught: list[Exception] = []
+
+	class MyClass:
+		@event(method=True, on_error=caught.append)
+		def e(self, a: int, /) -> None: ...
+
+	instance_event = MyClass().e
+	assert instance_event._on_error == caught.append # type: ignore # _on_error is private
+
+	def h(a: int): raise ValueError("Handler error")
+	instance_event += h
+	instance_event(1)
+	assert len(caught) == 1 and isinstance(caught[0], ValueError)
+
+### on_error Tests ###
+
+def test_sync_on_error():
+	caught: list[Exception] = []
+	event = Event[[], None](on_error=caught.append)
+	results: list[int] = []
+
+	def h1(): raise ValueError("First")
+	def h2(): results.append(2)
+	def h3(): raise KeyError("Second")
+
+	event += h1
+	event += h2
+	event += h3
+
+	event.invoke()
+	assert results == [2] # All handlers are called
+	assert [type(e) for e in caught] == [ValueError, KeyError]
+
+def test_sync_on_error_raises():
+	def on_error(exc: Exception) -> None: raise RuntimeError("on_error failed") from exc
+	event = Event[[], None](on_error=on_error)
+	results: list[int] = []
+
+	def h1(): raise ValueError("Handler error")
+	def h2(): results.append(2)
+
+	event += h1
+	event += h2
+
+	with pytest.raises(RuntimeError, match="on_error failed"):
+		event.invoke()
+	assert results == [] # Handlers after the failing one are not called
+
+def test_hook_exceptions_ignored():
+	event = Event[[], None]()
+	def hook(e: Event[[], None], h: Callable[[], None | Awaitable[None]]): raise ValueError("Hook error")
+	event.on_subscribe += hook
+
+	event += lambda: None
+	assert len(event) == 1
+
+@pytest.mark.asyncio
+async def test_async_on_error():
+	caught: list[Exception] = []
+	event = Event[[], Awaitable[None]](on_error=caught.append)
+	results: list[int] = []
+
+	def h1(): raise ValueError("Sync")
+	async def h2(): results.append(2)
+	async def h3(): raise KeyError("Async")
+
+	event += h1
+	event += h2
+	event += h3
+
+	awaitable = event.invoke()
+	assert [type(e) for e in caught] == [ValueError] # Sync handlers are reported during invoke()
+	await awaitable
+	assert results == [2]
+	assert [type(e) for e in caught] == [ValueError, KeyError] # Async handlers once they all finish
+
+@pytest.mark.asyncio
+async def test_async_on_error_raises_from_await():
+	def on_error(exc: Exception) -> None: raise RuntimeError("on_error failed") from exc
+	event = Event[[], Awaitable[None]](on_error=on_error)
+	results: list[int] = []
+
+	async def h1(): raise ValueError("Async")
+	async def h2(): results.append(2)
+
+	event += h1
+	event += h2
+
+	with pytest.raises(RuntimeError, match="on_error failed"):
+		await event.invoke()
+	assert results == [2] # Already-started async handlers still run to completion
+
+@pytest.mark.asyncio
+async def test_async_on_error_raises_closes_pending():
+	def on_error(exc: Exception) -> None: raise RuntimeError("on_error failed") from exc
+	event = Event[[], Awaitable[None]](on_error=on_error)
+	coroutines: list[Awaitable[None]] = []
+
+	async def work(): ...
+	def h1():
+		coroutines.append(coro := work())
+		return coro
+	def h2(): raise ValueError("Sync error")
+
+	event += h1
+	event += h2
+
+	with warnings.catch_warnings():
+		warnings.simplefilter("error") # A "coroutine was never awaited" warning would fail the test
+		with pytest.raises(RuntimeError, match="on_error failed"):
+			_ = event.invoke()
+	# Closed rather than left to raise "coroutine was never awaited" warnings when collected
+	assert len(coroutines) == 1
+	assert all(inspect.getcoroutinestate(c) == inspect.CORO_CLOSED for c in coroutines) # type: ignore
+
+@pytest.mark.asyncio
+async def test_fire_on_error():
+	caught: list[Exception] = []
+	event = Event[[], Awaitable[None]](on_error=caught.append)
+	async def h(): raise ValueError("Background")
+	event += h
+
+	event.fire()
+	event.fire()
+	await event.wait()
+	assert [type(e) for e in caught] == [ValueError, ValueError]
+
+@pytest.mark.asyncio
+async def test_fire_on_error_raises():
+	def on_error(exc: Exception) -> None: raise RuntimeError("on_error failed") from exc
+	event = Event[[], Awaitable[None]](on_error=on_error)
+	async def h(): raise ValueError("Background")
+	event += h
+
+	task = event.fire()
+	await event.wait() # Does not raise
+	assert isinstance(task.exception(), RuntimeError) # Stored on the task instead
