@@ -30,9 +30,14 @@ Eventic provides an easy way to implement the event pattern with full IDE suppor
     - [Context Manager](#context-manager)
   - [Events within Classes](#events-within-classes)
   - [Subscribe Hooks](#subscribe-hooks)
+  - [Event Options](#event-options)
+  - [Signature Rules](#signature-rules)
+  - [Handling Exceptions](#handling-exceptions)
 
 ## Features
 * **Type Safety**: Strongly typed, fully compatible with many type checkers, with autocomplete for event signatures.
+* **Unambiguous Signatures**: Event signatures are validated at definition time, so handlers always know whether arguments arrive by position or by name.
+* **Isolated Handlers**: An exception in one handler never stops the others. Pass an `on_error` callback to see them.
 * **Predictable Order**: Handlers are called in the order they subscribed.
 * **Lifecycle Management**: Built in lifecycle event hooks allow you to easily manage resources only when listeners are present.
 * **Flexible Invocation**: Choose between `invoke()` (awaitable), `fire()` (background execution), and standard call syntax `()`.
@@ -96,7 +101,7 @@ Eventic provides an easy way to implement the event pattern with full IDE suppor
 
 | Name | Type | Description |
 | --- | --- | --- |
-| [event()](docs/event.md) | Method | Create an Event from a instance or class method. |
+| [event()](docs/event.md) | Decorator | Create an Event from a function, or from an instance or class method with `method=True`. |
 
 ## Strong Typing
 
@@ -181,12 +186,14 @@ file_sent("example.txt", 2048, True)
 
 An Event is a dispatcher. You can define a "template" for the event using type hints or function signatures, and then "subscribe" other functions that will be triggered when the event is fired.
 
+Event parameters must be marked positional-only (`/`) or keyword-only (`*`), so handlers know exactly how they will be called. See [Signature Rules](#signature-rules).
+
 ```python
-from pyeventic import Event
+from pyeventic import event
 
 # Define an event using a function signature
-@Event
-def on_config_changed(key: str, value: str) -> None: ...
+@event
+def on_config_changed(key: str, value: str, /) -> None: ...
 
 # Subscribe a handler to the event
 @on_config_changed.subscribe
@@ -208,11 +215,11 @@ Eventic has the ability to mix both sync and async handlers. You can await an ev
 
 ```python
 import asyncio
-from pyeventic import Event
+from pyeventic import event
 
 # Define an async event using a function signature
-@Event
-async def on_user_signup(user_id: int) -> None: ...
+@event
+async def on_user_signup(user_id: int, /) -> None: ...
 
 # Subscribe a sync handler
 @on_user_signup.subscribe
@@ -244,11 +251,11 @@ Use `.fire()` for "Fire and Forget" scenarios, like telemetry or logging, where 
 
 ```python
 import asyncio
-from pyeventic import Event
+from pyeventic import event
 
 # Define an async event using a function signature
-@Event
-async def on_video_play(video_id: str) -> None: ...
+@event
+async def on_video_play(video_id: str, /) -> None: ...
 
 @on_video_play.subscribe
 async def upload_telemetry(video_id: str):
@@ -322,8 +329,8 @@ from pyeventic import Event, event
 
 class Button:
 	# Define an event with a method signature
-    @event
-    def on_click(self, x: int, y: int) -> None: ...
+    @event(method=True)
+    def on_click(self, x: int, y: int, /) -> None: ...
 
     def click(self, x: int, y: int) -> None:
 		# Invoke the event
@@ -425,3 +432,92 @@ game_manager.on_player_join -= func
 # Player Alice has joined the game!
 # Stopped listening for player_join notifications from the server.
 ```
+
+### Event Options
+
+Events accept one option, `on_error` (see [Handling Exceptions](#handling-exceptions)). Decorated methods also need `method=True`.
+
+```python
+from pyeventic import Event, event
+
+# Decorating a function
+@event(on_error=print)
+def on_save(path: str, /) -> None: ...
+
+# Decorating a method
+class Document:
+    @event(method=True, on_error=print)
+    def on_close(self, *, discard_changes: bool) -> None: ...
+
+# Without a decorator
+def on_load(path: str, /) -> None: ...
+loaded = event(on_load, on_error=print)
+
+# Without a signature function
+progress = Event[[int], None](on_error=print)
+```
+
+> [!NOTE]
+> Use `@event(method=True)` on methods to remove `self` / `cls` from the event signature. With plain `@event`, `self` stays in the signature and is passed when the event is invoked.
+
+### Signature Rules
+
+An event's signature is a contract with every handler. If a parameter can be passed either by position or by name, a handler can't know which one the event will use, so a handler that renames the parameter, or only accepts it one way, may break. Eventic checks the signature when the event is defined:
+
+```python
+from pyeventic import event
+
+@event
+def on_move(x: int, y: int) -> None: ...
+# TypeError: Event parameter 'x' must be positional-only or keyword-only. Add '/' or '*' to the signature.
+
+@event
+def on_move(x: int, y: int, /) -> None: ...         # OK: handlers are called as handler(x, y)
+
+@event
+def on_resize(*, width: int, height: int) -> None: ...  # OK: handlers are called as handler(width=..., height=...)
+
+@event
+def on_scroll(amount: int = 1, /) -> None: ...
+# TypeError: Event parameter 'amount' cannot have a default value.
+
+@event
+def on_anything(*args: int) -> None: ...
+# TypeError: Event parameter 'args' cannot be *args or **kwargs.
+```
+
+Default values are not allowed, since it would be unclear whether handlers receive the argument. `*args` and `**kwargs` are not allowed either, since handlers couldn't know what they will receive. To define an event without a signature function, use `Event[[int], None]()`; its signature is then only checked by the type checker.
+
+These rules only apply to the event's signature. Handlers are free to accept arguments however they like, as long as the type checker accepts them, for example with extra parameters that have defaults.
+
+### Handling Exceptions
+
+Handlers are responsible for their own exceptions. If a handler raises, the exception is ignored and the remaining handlers still run. To see these exceptions, pass `on_error`, which is called with each one:
+
+```python
+from pyeventic import event
+
+def report(exc: Exception) -> None:
+    print(f"A handler failed: {exc!r}")
+
+@event(on_error=report)
+def on_shutdown() -> None: ...
+
+@on_shutdown.subscribe
+def close_database() -> None:
+    raise ConnectionError("Database already closed")
+
+@on_shutdown.subscribe
+def flush_logs() -> None:
+    print("Logs flushed.")
+
+on_shutdown()
+
+# Output:
+# A handler failed: ConnectionError('Database already closed')
+# Logs flushed.
+```
+
+> [!NOTE]
+> * For synchronous handlers, `on_error` is called during `invoke()`. For asynchronous handlers, it is called once they have all finished, when the returned coroutine is awaited (or the `Task` returned by `fire()` finishes).
+> * If `on_error` itself raises, that exception propagates: from `invoke()` for synchronous handlers (the remaining handlers are not called), or from the awaited coroutine (or the `Task` from `fire()`) for asynchronous handlers.
