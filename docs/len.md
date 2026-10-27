@@ -14,14 +14,14 @@ The number of subscribed handlers.
 ## Examples
 
 ```python
-@Event
-def event(value: int) -> None: ...
+@event
+def my_event(value: int, /) -> None: ...
 
-event += lambda value: print("lambda 1")
-event += lambda value: print("lambda 2")
-event += lambda value: print("lambda 3")
+my_event += lambda value: print("lambda 1")
+my_event += lambda value: print("lambda 2")
+my_event += lambda value: print("lambda 3")
 
-print(len(event))
+print(len(my_event))
 
 # Output
 # 3

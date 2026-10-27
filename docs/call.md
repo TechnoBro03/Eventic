@@ -19,7 +19,8 @@ The keyword arguments.
 * `None | Coroutine[Any, Any, None]`
 
 > [!IMPORTANT]
-> * Individual handler exceptions are suppressed to ensure the event chain completes. Handlers should implement their own `try/except` blocks to manage internal exceptions.
+> * Handlers are called in the order they subscribed.
+> * An exception raised by a handler does not stop the remaining handlers. It is passed to the event's `on_error` callback (see [\_\_init\_\_()](init.md)), or ignored if there is none.
 > * Synchronous handlers are executed consecutively first, followed by the concurrent execution of asynchronous handlers. To avoid stalling the event loop, ensure synchronous handlers are non-blocking.
 > * Asynchronous work is **NOT** scheduled, the returned Coroutine must be explicitly awaited to run asynchronous work.
 
@@ -39,31 +40,31 @@ def __call__(self: Event[P, Awaitable[None]], *args: P.args, **kwargs: P.kwargs)
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 # Synchronous invocation
-event(42, "Hello, World!")
+my_event(42, "Hello, World!")
 ```
 
 ```python
-@Event
-async def event(value: int, text: str) -> None: ...
+@event
+async def my_event(value: int, text: str, /) -> None: ...
 
 async def main():
     # Asynchronous invocation
     # The returned Coroutine must be assigned to a variable or awaited
-    await event(42, "Hello, World!")
+    await my_event(42, "Hello, World!")
 ```
 
 <div id="truthy"></div>
 
 ```python
-@Event
-async def event(value: int, text: str) -> None: ...
+@event
+async def my_event(value: int, text: str, /) -> None: ...
 
 async def main():
-    if co := event(42, "Hello, World!"):
+    if co := my_event(42, "Hello, World!"):
         # There are async handlers. We must await their completion.
         await co
     else:

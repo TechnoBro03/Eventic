@@ -20,28 +20,28 @@ The callable being subscribed.
 ## Examples
 
 ```python
-@Event
-def event(value: int) -> None: ...
+@event
+def my_event(value: int, /) -> None: ...
 
-event.on_subscribe += lambda evt, handler: print(f"Handler {handler} subscribed to event {evt}")
+my_event.on_subscribe += lambda evt, handler: print(f"Handler {handler} subscribed to event {evt}")
 
-@event.subscribe
+@my_event.subscribe
 def handler(value: int) -> None: ...
 
 # Output
-# Handler <function handler at 0x0000011B61CCE660> subscribed to event Event('event')
+# Handler <function handler at 0x0000011B61CCE660> subscribed to event Event('my_event')
 ```
 
 ```python
-@Event
-def event(value: int) -> None: ...
-on = event.on_subscribe
+@event
+def my_event(value: int, /) -> None: ...
+on = my_event.on_subscribe
 
 # Direct assignment
-event.on_subscribe = Event()
+my_event.on_subscribe = Event()
 
 # Event remains unchanged
-print(on is event.on_subscribe)
+print(on is my_event.on_subscribe)
 
 # Output:
 # True

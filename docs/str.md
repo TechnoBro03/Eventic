@@ -15,11 +15,11 @@ The user-friendly string representation of this Event.
 
 ```python
 class MyClass:
-    @event
-    def event(self, value: int) -> None: ...
+    @event(method=True)
+    def my_event(self, value: int, /) -> None: ...
 
-print(str(MyClass.event))
+print(str(MyClass.my_event))
 
 # Output:
-# Event('MyClass.event')
+# Event('MyClass.my_event')
 ```

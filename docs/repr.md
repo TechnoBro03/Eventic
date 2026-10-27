@@ -17,11 +17,11 @@ The detailed string representation of this Event.
 
 ```python
 class MyClass:
-    @event
-    def event(self, value: int) -> None: ...
+    @event(method=True)
+    def my_event(self, value: int, /) -> None: ...
 
-print(repr(MyClass.event))
+print(repr(MyClass.my_event))
 
 # Output:
-# <Event 'MyClass.event' func='event' handlers=0 tasks=0>
+# <Event 'MyClass.my_event' func='my_event' handlers=0 tasks=0>
 ```

@@ -37,27 +37,27 @@ def subscribed(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[N
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
-with event.subscribed(lambda value, text: print(f"handler: {value} {text}")):
-    event.invoke(1, "2")
+with my_event.subscribed(lambda value, text: print(f"handler: {value} {text}")):
+    my_event.invoke(1, "2")
 
-event.invoke(3, "4")
+my_event.invoke(3, "4")
 
 # Output:
 # handler 1 2
 ```
 
 ```python
-@Event
-async def event(value: int, text: str) -> None: ...
+@event
+async def my_event(value: int, text: str, /) -> None: ...
 
 async def main():
-    async with event.subscribed(lambda value, text: print(f"handler: {value} {text}")):
-        await event.invoke(1, "2")
+    async with my_event.subscribed(lambda value, text: print(f"handler: {value} {text}")):
+        await my_event.invoke(1, "2")
 
-    await event.invoke(3, "4")
+    await my_event.invoke(3, "4")
 
 # Output:
 # handler: 1 2
