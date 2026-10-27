@@ -23,7 +23,7 @@ The original callable.
 
 > [!NOTE]
 > * The handler is invoked whenever the event is fired.
-> * The order of invocation is not guaranteed.
+> * Handlers are called in the order they subscribed.
 > * A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 ## Overloads

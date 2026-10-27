@@ -12,6 +12,7 @@ class Event(Generic[P, R]):
 	A thread-safe, strongly typed event.
 
 	Supports both synchronous and asynchronous events, decorators, one-time handlers, and context-managed subscriptions.
+	Handlers are called in the order they subscribed.
 
 	See `Eventic Documentation <https://github.com/TechnoBro03/Eventic/>`_ for more information.
 	"""
@@ -57,7 +58,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.
@@ -72,7 +73,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.
@@ -87,7 +88,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.
@@ -235,7 +236,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.
@@ -250,7 +251,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.
@@ -265,7 +266,7 @@ class Event(Generic[P, R]):
 		"""
 		Subscribe a handler to this event.
 
-		| The handler is invoked whenever the event is fired and order of invocation is not guaranteed.
+		| The handler is invoked whenever the event is fired. Handlers are called in the order they subscribed.
 		| A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 		:param handler: The handler to subscribe.

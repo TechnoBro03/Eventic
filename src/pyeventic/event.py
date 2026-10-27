@@ -34,10 +34,10 @@ class Event(Generic[P, R]):
 		if func and not callable(func): raise TypeError(f"Expected a callable, got {type(func).__name__!r}.")
 
 		self._lock = threading.RLock()
-		"""A reentrant lock to synchronize access to the handlers set."""
+		"""A reentrant lock to synchronize access to the handlers dict."""
 
-		self._handlers: set[Callable[P, None | Awaitable[None]]] = set()
-		"""A set of handlers subscribed to this event."""
+		self._handlers: dict[Callable[P, None | Awaitable[None]], None] = {}
+		"""The handlers subscribed to this event, in subscription order (used as an ordered set)."""
 
 		self._events = WeakKeyDictionary[object, "Event[P, R]"]()
 		"""The per-instance events for this event descriptor."""
@@ -123,7 +123,7 @@ class Event(Generic[P, R]):
 
 		with self._lock:
 			if handler not in self._handlers:
-				self._handlers.add(handler)
+				self._handlers[handler] = None
 				self.on_subscribe(self, handler)
 		return handler
 
@@ -132,7 +132,7 @@ class Event(Generic[P, R]):
 
 		with self._lock:
 			if handler in self._handlers:
-				self._handlers.remove(handler)
+				del self._handlers[handler]
 				self.on_unsubscribe(self, handler)
 		return None
 

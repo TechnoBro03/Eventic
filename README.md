@@ -33,6 +33,7 @@ Eventic provides an easy way to implement the event pattern with full IDE suppor
 
 ## Features
 * **Type Safety**: Strongly typed, fully compatible with many type checkers, with autocomplete for event signatures.
+* **Predictable Order**: Handlers are called in the order they subscribed.
 * **Lifecycle Management**: Built in lifecycle event hooks allow you to easily manage resources only when listeners are present.
 * **Flexible Invocation**: Choose between `invoke()` (awaitable), `fire()` (background execution), and standard call syntax `()`.
 * **Sync/Async**: Handle both synchronous and asynchronous events and handlers.
@@ -319,8 +320,8 @@ phone.drain(10)
 
 # Output:
 # Low battery: 15%!
-# Low battery: 5%!
 # Powering off due to low battery.
+# Low battery: 5%!
 ```
 
 ### Subscribe Hooks
