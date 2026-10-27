@@ -40,41 +40,41 @@ def once(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[None]])
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
-event.once(lambda value, text: print(f"handler: {value} {text}"))
+my_event.once(lambda value, text: print(f"handler: {value} {text}"))
 
-event.invoke(1, "2")
-event.invoke(3, "4")
+my_event.invoke(1, "2")
+my_event.invoke(3, "4")
 
 # Output:
 # handler: 1 2
 ```
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 # Decorator
-@event.once
+@my_event.once
 def handler(value: int, text: str) -> None: print(f"handler: {value} {text}")
 
-event.invoke(1, "2")
-event.invoke(3, "4")
+my_event.invoke(1, "2")
+my_event.invoke(3, "4")
 
 # Output
 # handler: 1 2
 ```
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
-wrapper = event.once(lambda value, text: print(f"handler: {value} {text}"))
-event.unsubscribe(wrapper)
+wrapper = my_event.once(lambda value, text: print(f"handler: {value} {text}"))
+my_event.unsubscribe(wrapper)
 
-event.invoke(1, "2")
+my_event.invoke(1, "2")
 
 # Output:
 #

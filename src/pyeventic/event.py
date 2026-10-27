@@ -1,12 +1,37 @@
 import asyncio
 import inspect
 import threading
-from typing import Any, AsyncContextManager, Awaitable, Callable, Concatenate, ContextManager, Coroutine, Generic, ParamSpec, TypeVar
+from functools import update_wrapper
+from typing import Any, AsyncContextManager, Awaitable, Callable, Concatenate, ContextManager, Generic, ParamSpec, TypeVar
 from weakref import WeakKeyDictionary
 from .awaitable_group import AwaitableGroup
 
 P = ParamSpec("P")
 R = TypeVar("R", None, Awaitable[None])
+
+def _validate_signature(func: Callable[..., Any], method: bool) -> None:
+	"""
+	Check that an event prototype has an unambiguous signature.
+
+	:param func: The prototype function.
+	:param method: Whether the first parameter is the instance or class parameter, which is not validated.
+	:raises TypeError: If the signature breaks a rule.
+	"""
+	try: parameters = list(inspect.signature(func).parameters.values())
+	except (TypeError, ValueError): return # No signature available (e.g. some builtins), nothing to validate
+
+	if method: parameters = parameters[1:]
+
+	for p in parameters:
+		if p.default is not p.empty:
+			raise TypeError(f"Event parameter {p.name!r} cannot have a default value.")
+		if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+			raise TypeError(f"Event parameter {p.name!r} cannot be *args or **kwargs.")
+		if p.kind is p.POSITIONAL_OR_KEYWORD:
+			raise TypeError(
+				f"Event parameter {p.name!r} must be positional-only or keyword-only. "
+				"Add '/' or '*' to the signature."
+			)
 
 class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContextManager["Event[P, R]"]):
 	"""A context manager to subscribe and unsubscribe a handler to an Event."""
@@ -28,16 +53,28 @@ class _ContextManager(Generic[P, R], ContextManager["Event[P, R]"], AsyncContext
 		self.__exit__(exc_type, exc_value, traceback)
 
 class Event(Generic[P, R]):
-	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks")
+	__slots__ = ("_handlers", "_lock", "_func", "_on_subscribe", "_on_unsubscribe", "_events", "_owner", "_name", "_tasks", "_on_error", "_method", "__dict__")
 
-	def __init__(self, func: Callable[P, R] | None = None, *, owner: type | None = None, name: str | None = None) -> None:
+	def __init__(
+		self,
+		*args: Any,
+		on_error: Callable[[Exception], None] | None = None,
+		owner: type | None = None,
+		name: str | None = None,
+		_func: Callable[P, R] | None = None,
+		_method: bool = False,
+	) -> None:
+		# Only `event` creates an Event from a function, so @Event (Event(func)) fails with a pointer to it
+		if args: raise TypeError("Event() does not take a function. Use @event or event(func) to create an Event from a function.")
+		func = _func
 		if func and not callable(func): raise TypeError(f"Expected a callable, got {type(func).__name__!r}.")
+		if on_error is not None and not callable(on_error): raise TypeError(f"Expected a callable, got {type(on_error).__name__!r}.")
 
 		self._lock = threading.RLock()
-		"""A reentrant lock to synchronize access to the handlers set."""
+		"""A reentrant lock to synchronize access to the handlers dict."""
 
-		self._handlers: set[Callable[P, None | Awaitable[None]]] = set()
-		"""A set of handlers subscribed to this event."""
+		self._handlers: dict[Callable[P, None | Awaitable[None]], None] = {}
+		"""The handlers subscribed to this event, in subscription order (used as an ordered set)."""
 
 		self._events = WeakKeyDictionary[object, "Event[P, R]"]()
 		"""The per-instance events for this event descriptor."""
@@ -60,9 +97,20 @@ class Event(Generic[P, R]):
 		self._tasks: set[asyncio.Task[None]] = set()
 		"""A set of currently running tasks for this event."""
 
+		self._on_error = on_error
+		"""Called with each exception raised by a handler. If None, exceptions are ignored."""
+
+		self._method = _method
+		"""Whether the prototype's first parameter is the instance or class parameter (created with `event(method=True)`)."""
+
+		if func:
+			_validate_signature(func, _method)
+			# Copy name, docstring, signature, etc. for introspection (help(), inspect.signature, Sphinx)
+			update_wrapper(self, func)
+
 	def __repr__(self) -> str:
 		func = self._func.__name__ if self._func else "None"
-		
+
 		if self._owner and self._name:
 			return f"<Event '{self._owner.__name__}.{self._name}' func={func!r} handlers={len(self)} tasks={len(self._tasks)}>"
 		else:
@@ -72,7 +120,7 @@ class Event(Generic[P, R]):
 		if self._owner and self._name:
 			return f"Event('{self._owner.__name__}.{self._name}')"
 		return f"Event({self._func.__name__ if self._func else None!r})"
-	
+
 	def __len__(self) -> int:
 		with self._lock: return len(self._handlers)
 
@@ -102,9 +150,17 @@ class Event(Generic[P, R]):
 		# Descriptor access from the class, return the descriptor itself
 		if instance is None: return self
 
-		# Descriptor access from an instance, return the per-instance event
+		# Descriptor access from an instance, return the per-instance event (created on first access)
 		with self._lock:
-			event = self._events.setdefault(instance, Event[P, R](self._func, owner=self._owner, name=self._name))
+			event = self._events.get(instance)
+			if event is None:
+				event = self._events[instance] = Event[P, R](
+					_func=self._func,
+					on_error=self._on_error,
+					owner=self._owner,
+					name=self._name,
+					_method=self._method,
+				)
 		return event
 
 	def __set__(self, instance: object, value: "Event[P, R]") -> None:
@@ -123,20 +179,20 @@ class Event(Generic[P, R]):
 
 		with self._lock:
 			if handler not in self._handlers:
-				self._handlers.add(handler)
+				self._handlers[handler] = None
 				self.on_subscribe(self, handler)
 		return handler
-	
+
 	def unsubscribe(self, handler: Callable[P, None | Awaitable[None]]) -> None:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
 
 		with self._lock:
 			if handler in self._handlers:
-				self._handlers.remove(handler)
+				del self._handlers[handler]
 				self.on_unsubscribe(self, handler)
 		return None
-	
-	def invoke(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
+
+	def invoke(self, /, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		with self._lock:
 			handlers = list(self._handlers)
 		awaitables: list[Awaitable[None]] = []
@@ -146,13 +202,24 @@ class Event(Generic[P, R]):
 				result = handler(*args, **kwargs)
 				if result and inspect.isawaitable(result):
 					awaitables.append(result)
-			except Exception: pass # Ignore exceptions in handlers
+			except Exception as exc:
+				if self._on_error is None: continue # Handlers are responsible for their own exceptions
+				try: self._on_error(exc)
+				except BaseException:
+					# on_error raised, so the async handlers will never be awaited, close them to prevent warnings
+					AwaitableGroup(*awaitables).close()
+					raise
+
+		def on_done(results: list[Any]) -> None:
+			if self._on_error is None: return
+			for result in results:
+				if isinstance(result, Exception): self._on_error(result)
 
 		# Always return an awaitable, even if there are no awaitables to run.
 		# Acts as None for synchronous handlers and a coroutine for asynchronous ones
-		return AwaitableGroup(*awaitables)
-	
-	def fire(self: "Event[P, Awaitable[None]]", *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
+		return AwaitableGroup(*awaitables, callback=on_done)
+
+	def fire(self: "Event[P, Awaitable[None]]", /, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
 		awaitable = self.invoke(*args, **kwargs)
 
 		try:
@@ -176,8 +243,9 @@ class Event(Generic[P, R]):
 		with self._lock:
 			tasks = list(self._tasks)
 
-		if tasks:
-			await asyncio.gather(*tasks, return_exceptions=True)
+		if not tasks: return
+
+		await asyncio.gather(*tasks, return_exceptions=True)
 
 	def once(self, handler: Callable[P, None | Awaitable[None]]) -> Callable[P, None | Awaitable[None]]:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
@@ -188,7 +256,7 @@ class Event(Generic[P, R]):
 
 		self.subscribe(wrapper)
 		return wrapper
-	
+
 	def subscribed(self, handler: Callable[P, None | Awaitable[None]]) -> _ContextManager[P, R]:
 		if not callable(handler): raise TypeError(f"Expected a callable, got {type(handler).__name__!r}.")
 		return _ContextManager(self, handler)
@@ -200,16 +268,16 @@ class Event(Generic[P, R]):
 	def __isub__(self, handler: Callable[P, None | Awaitable[None]]) -> "Event[P, R]":
 		self.unsubscribe(handler)
 		return self
-	
-	def __call__(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
+
+	def __call__(self, /, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		return self.invoke(*args, **kwargs)
-	
+
 	@property
 	def on_subscribe(self) -> "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]":
 		with self._lock:
 			if self._on_subscribe is None: self._on_subscribe = Event()
 		return self._on_subscribe
-	
+
 	@on_subscribe.setter
 	def on_subscribe(self, value: "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]") -> None: ...
 	# Do nothing to prevent overwriting the event
@@ -219,16 +287,24 @@ class Event(Generic[P, R]):
 		with self._lock:
 			if self._on_unsubscribe is None: self._on_unsubscribe = Event()
 		return self._on_unsubscribe
-	
+
 	@on_unsubscribe.setter
 	def on_unsubscribe(self, value: "Event[[Event[P, R], Callable[P, None | Awaitable[None]]], None]") -> None: ...
 	# Do nothing to prevent overwriting the event
 
 	def _on_task_done(self, task: asyncio.Task[None]) -> None:
-		try: task.exception()
-		except (Exception, asyncio.CancelledError): pass
+		# The task's exception (only possible if on_error raises) is deliberately left unretrieved: if no one awaits
+		# the task, asyncio reports it as "Task exception was never retrieved" instead of it being silently lost.
 		with self._lock:
 			self._tasks.discard(task)
 
-def event(func: Callable[Concatenate[Any, P], R]) -> "Event[P, R]":
-	return Event[P, R](func) # type: ignore # This is for typing only, callable is never used
+def event(
+	func: Callable[P, R] | None = None,
+	/,
+	*,
+	method: bool = False,
+	on_error: Callable[[Exception], None] | None = None,
+) -> "Event[P, R] | Callable[[Callable[P, R]], Event[P, R]]":
+	def decorator(func: Callable[P, R]) -> "Event[P, R]":
+		return Event[P, R](_func=func, on_error=on_error, _method=method)
+	return decorator(func) if func else decorator

@@ -1,5 +1,5 @@
 from types import TracebackType
-from typing import Any, Awaitable, Coroutine, Generator
+from typing import Any, Awaitable, Callable, Coroutine, Generator
 
 class AwaitableGroup(Coroutine[Any, Any, None], Awaitable[None]):
 	"""
@@ -7,12 +7,19 @@ class AwaitableGroup(Coroutine[Any, Any, None], Awaitable[None]):
 
 	If the AwaitableGroup is closed or deleted, any pending awaitables are cleaned up to prevent warnings.
 	"""
-	def __init__(self, *awaitables: Awaitable[None]) -> None:
+	def __init__(
+		self,
+		*awaitables: Awaitable[None],
+		callback: Callable[[list[Any]], None] | None = None,
+	) -> None:
 		"""
 		Initialize a new AwaitableGroup with the given awaitables.
 
 		:param awaitables: The awaitables to aggregate.
 		:type awaitables: tuple[Awaitable[None], ...]
+		:param callback: Called once all awaitables finish, with their results in order. Exceptions are passed as
+			results rather than raised. Anything the callback raises propagates to whoever awaited the group.
+		:type callback: Callable[[list[Any]], None] | None
 		"""
 
 	def __bool__(self) -> bool:

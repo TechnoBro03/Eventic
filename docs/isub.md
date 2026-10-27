@@ -40,19 +40,19 @@ def __isub__(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[Non
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 def handler(value: int, text: str) -> None:
 	print(f"handler: {value} {text}")
 
-event -= handler
+my_event -= handler
 ```
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 # Lambda
-event -= lambda value, text: print(f"lambda handler: {value} {text}")
+my_event -= lambda value, text: print(f"lambda handler: {value} {text}")
 ```

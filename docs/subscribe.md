@@ -23,7 +23,7 @@ The original callable.
 
 > [!NOTE]
 > * The handler is invoked whenever the event is fired.
-> * The order of invocation is not guaranteed.
+> * Handlers are called in the order they subscribed.
 > * A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 ## Overloads
@@ -43,8 +43,8 @@ def subscribe(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[No
 
 ```python
 # Assuming you have the following Event defined:
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 ```
 
 ```python
@@ -52,17 +52,17 @@ def handler1(value: int, text: str) -> None:
 	print(f"handler1: {value} {text}")
 
 # Method call
-event.subscribe(handler1)
+my_event.subscribe(handler1)
 ```
 
 ```python
 # Decorator
-@event.subscribe
+@my_event.subscribe
 def handler2(value: int, text: str) -> None:
 	print(f"handler2: {value} {text}")
 ```
 
 ```python
 # Lambda
-event.subscribe(lambda value, text: print(f"lambda handler {value}, {text}"))
+my_event.subscribe(lambda value, text: print(f"lambda handler {value}, {text}"))
 ```

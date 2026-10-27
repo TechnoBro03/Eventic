@@ -39,12 +39,12 @@ def unsubscribe(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 def handler(value: int, text: str) -> None:
 	print(f"handler: {value} {text}")
 
 # Method call
-event.unsubscribe(handler)
+my_event.unsubscribe(handler)
 ```

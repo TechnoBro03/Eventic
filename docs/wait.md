@@ -16,8 +16,8 @@ def wait(self: Event[P, Awaitable[None]]) -> Coroutine[Any, Any, None]: ...
 ## Examples
 
 ```python
-@Event
-async def event(value: int, text: str) -> None: ...
+@event
+async def my_event(value: int, text: str, /) -> None: ...
 
 async def slow_handler(value: int, text: str) -> None:
     await asyncio.sleep(1)
@@ -27,14 +27,14 @@ async def fast_handler(value: int, text: str) -> None:
     print(f"fast handler: {value} {text}")
 
 async def main():
-    event.subscribe(slow_handler)
-    event.fire(42, "Hello, World!")
+    my_event.subscribe(slow_handler)
+    my_event.fire(42, "Hello, World!")
 
-    event.subscribe(fast_handler)
+    my_event.subscribe(fast_handler)
 
     # Wait for all previous processes to finish
-    await event.wait()
-    await event.fire(100, "Goodbye!")
+    await my_event.wait()
+    await my_event.fire(100, "Goodbye!")
 
 # Output:
 # slow handler: 42 Hello, World!

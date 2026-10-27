@@ -23,7 +23,7 @@ The event instance.
 
 > [!NOTE]
 > * The handler is invoked whenever the event is fired.
-> * The order of invocation is not guaranteed.
+> * Handlers are called in the order they subscribed.
 > * A handler may only be subscribed once; subsequent subscriptions of the same handler have no effect.
 
 ## Overloads
@@ -42,19 +42,19 @@ def __iadd__(self: Event[P, Awaitable[None]], handler: Callable[P, Awaitable[Non
 ## Examples
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 def handler(value: int, text: str) -> None:
 	print(f"handler: {value} {text}")
 
-event += handler
+my_event += handler
 ```
 
 ```python
-@Event
-def event(value: int, text: str) -> None: ...
+@event
+def my_event(value: int, text: str, /) -> None: ...
 
 # Lambda
-event += lambda value, text: print(f"lambda handler: {value} {text}")
+my_event += lambda value, text: print(f"lambda handler: {value} {text}")
 ```

@@ -20,30 +20,30 @@ The callable being unsubscribed.
 ## Examples
 
 ```python
-@Event
-def event(value: int) -> None: ...
+@event
+def my_event(value: int, /) -> None: ...
 
-event.on_unsubscribe += lambda evt, handler: print(f"Handler {handler} unsubscribed from event {evt}")
+my_event.on_unsubscribe += lambda evt, handler: print(f"Handler {handler} unsubscribed from event {evt}")
 
-@event.subscribe
+@my_event.subscribe
 def handler(value: int) -> None: ...
 
-event.unsubscribe(handler)
+my_event.unsubscribe(handler)
 
 # Output
-# Handler <function handler at 0x000001540B70E660> unsubscribed from event Event('event')
+# Handler <function handler at 0x000001540B70E660> unsubscribed from event Event('my_event')
 ```
 
 ```python
-@Event
-def event(value: int) -> None: ...
-on = event.on_unsubscribe
+@event
+def my_event(value: int, /) -> None: ...
+on = my_event.on_unsubscribe
 
 # Direct assignment
-event.on_unsubscribe = Event()
+my_event.on_unsubscribe = Event()
 
 # Event remains unchanged
-print(on is event.on_unsubscribe)
+print(on is my_event.on_unsubscribe)
 
 # Output:
 # True
