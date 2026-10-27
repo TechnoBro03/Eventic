@@ -101,22 +101,78 @@ Eventic provides an easy way to implement the event pattern with full IDE suppor
 ## Strong Typing
 
 Eventic is a strongly typed library. This helps prevent runtime errors while writing your code, and provides nice feature like autocomplete and full docstring support.\
-Below are a few examples of how the typing system works in Eventic:
+Below are a few examples of how the typing system works in Eventic (errors shown are from Pylance):
 
 ### Handler mismatch
-<img src="imgs/1.png" width="70%" alt="Handler mismatch example">
+
+```python
+@event
+def on_score_update(points: int, /) -> None: ...
+
+@on_score_update.subscribe  # Error: handler signature does not match the event
+def wrong_handler(points: str): ...
+
+# Argument of type "(points: str) -> None" cannot be assigned to parameter "handler"
+# of type "(points: int, /) -> None" in function "subscribe"
+#   Parameter 1: type "int" is incompatible with type "str"
+```
 
 ### Awaiting a sync event
-<img src="imgs/2.png" width="60%" alt="Await sync example">
+
+```python
+@event
+def on_click(x: int, y: int, /) -> None: ...
+
+async def main():
+    await on_click(10, 20)  # Error: sync events return None
+
+# "None" is not awaitable
+```
 
 ### Not awaiting an async event
-<img src="imgs/3.png" width="70%" alt="Not awaiting async example">
+
+```python
+@event
+async def on_upload(file_id: str, /) -> None: ...
+
+def trigger():
+    on_upload("file_001")  # Error: async events must be awaited (or use .fire())
+
+# Result of async function call is not used; use "await" or assign result to variable
+```
 
 ### Passing the incorrect arguments to invoke
-<img src="imgs/4.png" width="70%" alt="Incorrect invoke arguments example">
+
+```python
+@event
+def update_score(points: int, /) -> None: ...
+
+update_score("ten")  # Error: argument type does not match the event signature
+
+# Argument of type "Literal['ten']" cannot be assigned to parameter "points" of type "int"
+```
 
 ### Autocomplete and full docstring
-<img src="imgs/5.png" width="55%" alt="docstring example">
+
+```python
+@event
+def file_sent(path: str, size: int, encrypted: bool, /) -> None:
+    """
+    An event that is triggered when a file is sent.
+
+    :param path: The file path.
+    :type path: str
+    :param size: The size of the file in bytes.
+    :type size: int
+    :param encrypted: Whether the file is encrypted.
+    :type encrypted: bool
+    """
+
+file_sent("example.txt", 2048, True)
+# Hovering or typing file_sent( shows the signature
+#   (path: str, size: int, encrypted: bool, /) -> None
+# along with the docstring and per-parameter descriptions above.
+```
 
 
 ## Getting Started
