@@ -472,3 +472,25 @@ def test_resubscribe_moves_to_end():
 def test_descriptor_instance_cached():
 	o = Owner()
 	assert o.evt is o.evt
+
+def test_keyword_parameter_named_self():
+	# Event's own methods take "self" positionally, so an event parameter can also be named "self"
+	@event
+	def e(*, self: int) -> None: ...
+
+	received: list[int] = []
+	e += lambda self: received.append(self)
+	e(self=1)
+	e.invoke(self=2)
+	assert received == [1, 2]
+
+@pytest.mark.asyncio
+async def test_keyword_parameter_named_self_fire():
+	@event
+	async def e(*, self: int) -> None: ...
+
+	received: list[int] = []
+	async def handler(*, self: int) -> None: received.append(self)
+	e += handler
+	await e.fire(self=1)
+	assert received == [1]

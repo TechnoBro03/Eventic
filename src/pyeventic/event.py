@@ -138,7 +138,7 @@ class Event(Generic[P, R]):
 				self.on_unsubscribe(self, handler)
 		return None
 
-	def invoke(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
+	def invoke(self, /, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		with self._lock:
 			handlers = list(self._handlers)
 		awaitables: list[Awaitable[None]] = []
@@ -154,7 +154,7 @@ class Event(Generic[P, R]):
 		# Acts as None for synchronous handlers and a coroutine for asynchronous ones
 		return AwaitableGroup(*awaitables)
 
-	def fire(self: "Event[P, Awaitable[None]]", *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
+	def fire(self: "Event[P, Awaitable[None]]", /, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[None]:
 		awaitable = self.invoke(*args, **kwargs)
 
 		try:
@@ -204,7 +204,7 @@ class Event(Generic[P, R]):
 		self.unsubscribe(handler)
 		return self
 
-	def __call__(self, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
+	def __call__(self, /, *args: P.args, **kwargs: P.kwargs) -> AwaitableGroup:
 		return self.invoke(*args, **kwargs)
 
 	@property
