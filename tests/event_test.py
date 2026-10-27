@@ -466,3 +466,9 @@ def test_resubscribe_moves_to_end():
 
 	event.invoke()
 	assert results == [2, 1]
+
+### Introspection Tests ###
+
+def test_descriptor_instance_cached():
+	o = Owner()
+	assert o.evt is o.evt

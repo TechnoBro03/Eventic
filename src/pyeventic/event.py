@@ -102,9 +102,11 @@ class Event(Generic[P, R]):
 		# Descriptor access from the class, return the descriptor itself
 		if instance is None: return self
 
-		# Descriptor access from an instance, return the per-instance event
+		# Descriptor access from an instance, return the per-instance event (created on first access)
 		with self._lock:
-			event = self._events.setdefault(instance, Event[P, R](self._func, owner=self._owner, name=self._name))
+			event = self._events.get(instance)
+			if event is None:
+				event = self._events[instance] = Event[P, R](self._func, owner=self._owner, name=self._name)
 		return event
 
 	def __set__(self, instance: object, value: "Event[P, R]") -> None:
